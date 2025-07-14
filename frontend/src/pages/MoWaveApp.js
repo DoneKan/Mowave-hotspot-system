@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Wifi, 
-  CreditCard, 
-  Smartphone, 
-  CheckCircle, 
-  AlertCircle, 
-  User, 
-  Settings, 
+import {
+  Wifi,
+  CreditCard,
+  Smartphone,
+  CheckCircle,
+  AlertCircle,
+  User,
+  Settings,
   BarChart3,
   DollarSign,
   Clock,
@@ -37,11 +37,11 @@ const MoWaveApp = () => {
         },
         ...options
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error(`API Error (${endpoint}):`, error);
@@ -113,7 +113,7 @@ const MoWaveApp = () => {
             <p className="text-gray-600">Enter your voucher code to access internet</p>
           </div>
 
-            <form onSubmit={handleVoucherCheck} className="space-y-4">
+          <form onSubmit={handleVoucherCheck} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Voucher Code
@@ -136,7 +136,7 @@ const MoWaveApp = () => {
               >
                 {loading ? 'Checking...' : 'Check Voucher'}
               </button>
-              
+
               {voucherStatus?.is_valid && (
                 <button
                   type="button"
@@ -248,9 +248,8 @@ const MoWaveApp = () => {
             {pricingPlans.map((plan) => (
               <div
                 key={plan.id}
-                className={`relative bg-white rounded-lg shadow-lg p-6 cursor-pointer transition-all hover:shadow-xl ${
-                  plan.popular ? 'border-2 border-blue-500' : 'border border-gray-200'
-                }`}
+                className={`relative bg-white rounded-lg shadow-lg p-6 cursor-pointer transition-all hover:shadow-xl ${plan.popular ? 'border-2 border-blue-500' : 'border border-gray-200'
+                  }`}
                 onClick={() => handlePlanSelect(plan)}
               >
                 {plan.popular && (
@@ -258,14 +257,14 @@ const MoWaveApp = () => {
                     Popular
                   </span>
                 )}
-                
+
                 <div className="text-center">
                   <h3 className="text-xl font-bold text-gray-800 mb-2">{plan.name}</h3>
                   <div className="text-3xl font-bold text-blue-600 mb-2">
                     UGX {plan.price.toLocaleString()}
                   </div>
                   <p className="text-gray-600 mb-4">{plan.duration} hour{plan.duration > 1 ? 's' : ''} access</p>
-                  
+
                   <div className="space-y-2 mb-6">
                     <div className="flex items-center justify-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-500" />
@@ -280,7 +279,7 @@ const MoWaveApp = () => {
                       <span className="text-sm text-gray-600">24/7 support</span>
                     </div>
                   </div>
-                  
+
                   <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
                     Select Plan
                   </button>
@@ -322,7 +321,7 @@ const MoWaveApp = () => {
                     <Smartphone className="w-5 h-5 text-yellow-500" />
                     <span>MTN Mobile Money</span>
                   </label>
-                  
+
                   <label className="flex items-center gap-2 p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
                     <input
                       type="radio"
@@ -399,7 +398,7 @@ const MoWaveApp = () => {
 
     const handleLogin = async (e) => {
       e.preventDefault();
-      
+
       setLoading(true);
       try {
         const response = await apiCall('/auth/login', {
@@ -497,7 +496,7 @@ const MoWaveApp = () => {
             apiCall('/admin/stats'),
             apiCall('/admin/vouchers')
           ]);
-          
+
           setStats(statsResponse.data);
           setVouchers(vouchersResponse.data);
         } catch (error) {
@@ -505,10 +504,11 @@ const MoWaveApp = () => {
         }
       };
 
-      if (user) {
+      if (user?.token) {
         fetchDashboardData();
       }
     }, [user]);
+
 
     const handleLogout = () => {
       setUser(null);
@@ -595,9 +595,8 @@ const MoWaveApp = () => {
                     <td className="p-4">{voucher.duration_hours}h</td>
                     <td className="p-4">UGX {voucher.price.toLocaleString()}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        voucher.is_redeemed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <span className={`px-2 py-1 text-xs rounded-full ${voucher.is_redeemed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                        }`}>
                         {voucher.is_redeemed ? 'Used' : 'Available'}
                       </span>
                     </td>
@@ -623,34 +622,31 @@ const MoWaveApp = () => {
             <Wifi className="w-8 h-8 text-blue-600" />
             <span className="text-xl font-bold text-gray-800">MoWave</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <button
               onClick={() => setCurrentView('home')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                currentView === 'home' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${currentView === 'home' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               <Home className="w-4 h-4" />
               Home
             </button>
-            
+
             <button
               onClick={() => setCurrentView('buy')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                currentView === 'buy' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${currentView === 'buy' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
+                }`}
             >
               <CreditCard className="w-4 h-4" />
               Buy Voucher
             </button>
-            
+
             {user ? (
               <button
                 onClick={() => setCurrentView('admin')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  currentView === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${currentView === 'admin' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
+                  }`}
               >
                 <Settings className="w-4 h-4" />
                 Dashboard
@@ -658,9 +654,8 @@ const MoWaveApp = () => {
             ) : (
               <button
                 onClick={() => setCurrentView('login')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  currentView === 'login' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${currentView === 'login' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:text-gray-800'
+                  }`}
               >
                 <User className="w-4 h-4" />
                 Admin
@@ -677,9 +672,8 @@ const MoWaveApp = () => {
     if (!message.text) return null;
 
     return (
-      <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
-        message.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-      }`}>
+      <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${message.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
         <div className="flex items-center gap-2">
           {message.type === 'success' ? (
             <CheckCircle className="w-5 h-5" />
@@ -697,7 +691,7 @@ const MoWaveApp = () => {
     <div className="min-h-screen bg-gray-50">
       <Navigation />
       <MessageDisplay />
-      
+
       <div className="max-w-7xl mx-auto p-6">
         {currentView === 'home' && <VoucherEntry />}
         {currentView === 'buy' && <PaymentFlow />}

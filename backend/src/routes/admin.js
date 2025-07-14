@@ -8,10 +8,6 @@ router.use(authenticateToken);
 router.use(requireAdmin);
 
 
-// All admin routes require authentication and admin role
-router.use(authenticateToken);
-router.use(requireAdmin);
-
 // ==================== DASHBOARD ====================
 // GET /admin/dashboard - Get comprehensive dashboard statistics
 router.get('/dashboard', async (req, res) => {

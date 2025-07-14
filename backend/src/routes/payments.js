@@ -1,6 +1,9 @@
+// backend/routes/payments.js - Enhanced version
 const express = require('express');
 const router = express.Router();
 const db = require('../models/database');
+const paymentService = require('../services/paymentService');
+const smsService = require('../services/smsService'); // We'll create this next
 const { v4: uuidv4 } = require('uuid');
 
 // Simple auth check - you'll need to implement proper middleware
@@ -9,7 +12,7 @@ const authenticateToken = (req, res, next) => {
   next();
 };
 
-// Validation middleware
+// Enhanced validation middleware
 const validatePaymentData = (req, res, next) => {
   const { amount, phoneNumber, paymentMethod, voucherId } = req.body;
   
@@ -20,11 +23,34 @@ const validatePaymentData = (req, res, next) => {
     });
   }
   
+  // Enhanced phone number validation for both MTN and Airtel
+  const mtnPrefixes = ['256070', '256077', '256078', '256039'];
+  const airtelPrefixes = ['256070', '256075', '256074', '256020'];
+  
   if (!phoneNumber || !/^256[0-9]{9}$/.test(phoneNumber)) {
     return res.status(400).json({
       success: false,
       message: 'Invalid phone number format. Use 256XXXXXXXXX'
     });
+  }
+  
+  // Validate payment method matches phone number prefix
+  if (paymentMethod === 'mtn_momo') {
+    const isMTN = mtnPrefixes.some(prefix => phoneNumber.startsWith(prefix));
+    if (!isMTN) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is not compatible with MTN MoMo'
+      });
+    }
+  } else if (paymentMethod === 'airtel_money') {
+    const isAirtel = airtelPrefixes.some(prefix => phoneNumber.startsWith(prefix));
+    if (!isAirtel) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is not compatible with Airtel Money'
+      });
+    }
   }
   
   if (!paymentMethod || !['mtn_momo', 'airtel_money'].includes(paymentMethod)) {
@@ -44,7 +70,7 @@ const validatePaymentData = (req, res, next) => {
   next();
 };
 
-// CREATE - Initiate a new payment
+// CREATE - Initiate a new payment with enhanced mock integration
 router.post('/', validatePaymentData, async (req, res) => {
   try {
     const { amount, phoneNumber, paymentMethod, voucherId, userId } = req.body;
@@ -81,7 +107,7 @@ router.post('/', validatePaymentData, async (req, res) => {
       userId: userId || null,
       status: 'pending',
       transactionId: null,
-      reference: `MW-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      reference: paymentService.generateReference(),
       metadata: {
         voucherCode: voucher.code,
         dataLimit: voucher.dataLimit,
@@ -91,37 +117,44 @@ router.post('/', validatePaymentData, async (req, res) => {
     
     const payment = db.createPayment(paymentData);
     
-    // TODO: Integrate with actual payment provider (MTN MoMo or Airtel Money)
-    // For now, simulate payment initiation
-    setTimeout(() => {
-      // Simulate payment processing
-      const isSuccess = Math.random() > 0.3; // 70% success rate for demo
-      
-      if (isSuccess) {
-        // Update payment status
-        db.updatePayment(payment.id, {
-          status: 'success',
-          transactionId: `TXN-${Date.now()}`,
-          completedAt: new Date()
+    // Log payment initiation
+    console.log(`🚀 Payment initiated: ${payment.reference}`);
+    console.log(`📱 Phone: ${phoneNumber}, Method: ${paymentMethod}, Amount: ${amount} UGX`);
+    
+    // Process payment asynchronously with enhanced mock integration
+    setImmediate(async () => {
+      try {
+        const result = await paymentService.processPayment({
+          paymentId: payment.id,
+          reference: payment.reference,
+          amount,
+          phoneNumber,
+          paymentMethod,
+          voucherId,
+          userId
         });
         
-        // Mark voucher as used
-        db.updateVoucher(voucherId, {
-          isUsed: true,
-          usedAt: new Date(),
-          userId: userId || null
-        });
+        // Send SMS notification based on payment result
+        if (result.success) {
+          await smsService.sendVoucherCode({
+            phoneNumber,
+            voucherCode: voucher.code,
+            dataLimit: voucher.dataLimit,
+            duration: voucher.duration,
+            paymentReference: payment.reference
+          });
+        } else {
+          await smsService.sendPaymentFailureNotification({
+            phoneNumber,
+            paymentReference: payment.reference,
+            reason: result.message
+          });
+        }
         
-        console.log(`✅ Payment ${payment.id} completed successfully`);
-      } else {
-        db.updatePayment(payment.id, {
-          status: 'failed',
-          failureReason: 'Payment declined by provider'
-        });
-        
-        console.log(`❌ Payment ${payment.id} failed`);
+      } catch (error) {
+        console.error('Async payment processing error:', error);
       }
-    }, 5000); // Simulate 5-second processing time
+    });
     
     res.status(201).json({
       success: true,
@@ -132,7 +165,8 @@ router.post('/', validatePaymentData, async (req, res) => {
         status: payment.status,
         amount: payment.amount,
         phoneNumber: payment.phoneNumber,
-        paymentMethod: payment.paymentMethod
+        paymentMethod: payment.paymentMethod,
+        estimatedProcessingTime: paymentMethod === 'mtn_momo' ? '3-5 seconds' : '4-6 seconds'
       }
     });
     
@@ -146,7 +180,106 @@ router.post('/', validatePaymentData, async (req, res) => {
   }
 });
 
-// READ - Get payment by ID
+// Enhanced payment verification with detailed status
+router.get('/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const payment = db.getPaymentById(id);
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
+    }
+    
+    // Get voucher details if payment was successful
+    let voucherDetails = null;
+    if (payment.status === 'success' && payment.voucherId) {
+      const voucher = db.getVoucherById(payment.voucherId);
+      if (voucher) {
+        voucherDetails = {
+          code: voucher.code,
+          dataLimit: voucher.dataLimit,
+          duration: voucher.duration,
+          expiresAt: voucher.expiresAt
+        };
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        id: payment.id,
+        reference: payment.reference,
+        status: payment.status,
+        transactionId: payment.transactionId,
+        amount: payment.amount,
+        phoneNumber: payment.phoneNumber,
+        paymentMethod: payment.paymentMethod,
+        createdAt: payment.createdAt,
+        completedAt: payment.completedAt,
+        failureReason: payment.failureReason,
+        errorCode: payment.errorCode,
+        providerResponse: payment.providerResponse,
+        voucher: voucherDetails
+      }
+    });
+    
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify payment',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Check payment status by reference
+router.get('/reference/:reference', async (req, res) => {
+  try {
+    const { reference } = req.params;
+    
+    const result = await paymentService.checkPaymentStatus(reference);
+    
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('Payment status check error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check payment status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Enhanced payment statistics
+router.get('/stats/summary', authenticateToken, async (req, res) => {
+  try {
+    const stats = paymentService.getPaymentStats();
+    
+    res.json({
+      success: true,
+      data: stats
+    });
+    
+  } catch (error) {
+    console.error('Payment stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve payment statistics',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// READ - Get payment by ID (enhanced with provider details)
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -159,9 +292,27 @@ router.get('/:id', async (req, res) => {
       });
     }
     
+    // Add voucher details
+    let voucherDetails = null;
+    if (payment.voucherId) {
+      const voucher = db.getVoucherById(payment.voucherId);
+      if (voucher) {
+        voucherDetails = {
+          code: voucher.code,
+          dataLimit: voucher.dataLimit,
+          duration: voucher.duration,
+          isUsed: voucher.isUsed,
+          usedAt: voucher.usedAt
+        };
+      }
+    }
+    
     res.json({
       success: true,
-      data: payment
+      data: {
+        ...payment,
+        voucher: voucherDetails
+      }
     });
     
   } catch (error) {
@@ -174,7 +325,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// READ - Get all payments with filtering and pagination
+// READ - Get all payments with enhanced filtering
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { 
@@ -184,7 +335,8 @@ router.get('/', authenticateToken, async (req, res) => {
       limit = 10, 
       startDate, 
       endDate,
-      userId 
+      userId,
+      phoneNumber
     } = req.query;
     
     let payments = db.getAllPayments();
@@ -202,6 +354,10 @@ router.get('/', authenticateToken, async (req, res) => {
       payments = payments.filter(p => p.userId === userId);
     }
     
+    if (phoneNumber) {
+      payments = payments.filter(p => p.phoneNumber === phoneNumber);
+    }
+    
     if (startDate) {
       const start = new Date(startDate);
       payments = payments.filter(p => new Date(p.createdAt) >= start);
@@ -214,6 +370,25 @@ router.get('/', authenticateToken, async (req, res) => {
     
     // Sort by creation date (newest first)
     payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    // Add voucher details to each payment
+    payments = payments.map(payment => {
+      let voucherDetails = null;
+      if (payment.voucherId) {
+        const voucher = db.getVoucherById(payment.voucherId);
+        if (voucher) {
+          voucherDetails = {
+            code: voucher.code,
+            dataLimit: voucher.dataLimit,
+            duration: voucher.duration
+          };
+        }
+      }
+      return {
+        ...payment,
+        voucher: voucherDetails
+      };
+    });
     
     // Pagination
     const skip = (page - 1) * limit;
@@ -240,11 +415,11 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// UPDATE - Update payment status (mainly for admin use)
+// UPDATE - Update payment status (enhanced with provider validation)
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, transactionId, failureReason } = req.body;
+    const { status, transactionId, failureReason, errorCode } = req.body;
     
     const payment = db.getPaymentById(id);
     if (!payment) {
@@ -267,6 +442,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (status) updateData.status = status;
     if (transactionId) updateData.transactionId = transactionId;
     if (failureReason) updateData.failureReason = failureReason;
+    if (errorCode) updateData.errorCode = errorCode;
     
     // If marking as successful, also mark voucher as used
     if (status === 'success' && payment.status !== 'success') {
@@ -276,6 +452,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
           isUsed: true,
           usedAt: new Date(),
           userId: payment.userId
+        });
+        
+        // Send success SMS
+        await smsService.sendVoucherCode({
+          phoneNumber: payment.phoneNumber,
+          voucherCode: voucher.code,
+          dataLimit: voucher.dataLimit,
+          duration: voucher.duration,
+          paymentReference: payment.reference
         });
       }
       updateData.completedAt = new Date();
@@ -299,7 +484,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// DELETE - Cancel payment (soft delete)
+// DELETE - Cancel payment (enhanced with provider notification)
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -325,6 +510,12 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       cancelledAt: new Date()
     });
     
+    // Send cancellation SMS
+    await smsService.sendPaymentCancellationNotification({
+      phoneNumber: payment.phoneNumber,
+      paymentReference: payment.reference
+    });
+    
     res.json({
       success: true,
       message: 'Payment cancelled successfully',
@@ -336,79 +527,6 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to cancel payment',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// Get payment statistics
-router.get('/stats/summary', authenticateToken, async (req, res) => {
-  try {
-    const payments = db.getAllPayments();
-    
-    const stats = {
-      total: payments.length,
-      pending: payments.filter(p => p.status === 'pending').length,
-      successful: payments.filter(p => p.status === 'success').length,
-      failed: payments.filter(p => p.status === 'failed').length,
-      cancelled: payments.filter(p => p.status === 'cancelled').length,
-      totalRevenue: payments
-        .filter(p => p.status === 'success')
-        .reduce((sum, p) => sum + p.amount, 0),
-      averageAmount: payments.length > 0 
-        ? payments.reduce((sum, p) => sum + p.amount, 0) / payments.length 
-        : 0,
-      paymentMethods: {
-        mtn_momo: payments.filter(p => p.paymentMethod === 'mtn_momo').length,
-        airtel_money: payments.filter(p => p.paymentMethod === 'airtel_money').length
-      }
-    };
-    
-    res.json({
-      success: true,
-      data: stats
-    });
-    
-  } catch (error) {
-    console.error('Payment stats error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve payment statistics',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// Verify payment status (for client polling)
-router.get('/:id/verify', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const payment = db.getPaymentById(id);
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Payment not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        id: payment.id,
-        status: payment.status,
-        reference: payment.reference,
-        transactionId: payment.transactionId,
-        completedAt: payment.completedAt,
-        failureReason: payment.failureReason
-      }
-    });
-    
-  } catch (error) {
-    console.error('Payment verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to verify payment',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
